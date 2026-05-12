@@ -1,10 +1,20 @@
 local plugin = require("handoff")
+local repo_root = vim.fn.getcwd()
+
+local function write_temp_file(relative_path, lines)
+  local file_path = vim.fn.fnamemodify(relative_path, ":p")
+  vim.fn.mkdir(vim.fn.fnamemodify(file_path, ":h"), "p")
+  vim.fn.writefile(lines, file_path)
+  return file_path
+end
 
 describe("handoff", function()
+  after_each(function()
+    vim.cmd.cd(repo_root)
+    vim.fn.delete(vim.fn.fnamemodify("tests/tmp", ":p"), "rf")
+  end)
   it("copies current-line Reference to the + register via :HandoffCopyReference", function()
-    local file_path = vim.fn.fnamemodify("tests/tmp/current_line.lua", ":p")
-    vim.fn.mkdir(vim.fn.fnamemodify(file_path, ":h"), "p")
-    vim.fn.writefile({ "first line", "second line", "third line" }, file_path)
+    local file_path = write_temp_file("tests/tmp/current_line.lua", { "first line", "second line", "third line" })
 
     vim.cmd.edit(file_path)
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
@@ -17,9 +27,7 @@ describe("handoff", function()
   end)
 
   it("copies current-line Reference to the + register via the public Lua API", function()
-    local file_path = vim.fn.fnamemodify("tests/tmp/lua_api.lua", ":p")
-    vim.fn.mkdir(vim.fn.fnamemodify(file_path, ":h"), "p")
-    vim.fn.writefile({ "alpha", "beta", "gamma" }, file_path)
+    local file_path = write_temp_file("tests/tmp/lua_api.lua", { "alpha", "beta", "gamma" })
 
     vim.cmd.edit(file_path)
     vim.api.nvim_win_set_cursor(0, { 3, 0 })
@@ -32,11 +40,10 @@ describe("handoff", function()
 
   it("uses a git-root-relative path when the buffer is inside a git repository", function()
     local original_cwd = vim.fn.getcwd()
-    local nested_cwd = vim.fn.fnamemodify("tests/tmp/nested", ":p")
-    local file_path = vim.fn.fnamemodify("tests/tmp/git_relative.lua", ":p")
+    local nested_cwd = original_cwd .. "/tests/tmp/nested"
+    local file_path = write_temp_file("tests/tmp/git_relative.lua", { "one", "two" })
 
     vim.fn.mkdir(nested_cwd, "p")
-    vim.fn.writefile({ "one", "two" }, file_path)
 
     vim.cmd.cd(nested_cwd)
     vim.cmd.edit(file_path)
