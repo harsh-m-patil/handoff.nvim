@@ -1,5 +1,7 @@
 local M = {}
 local review_notes = {}
+local ghost_text_namespace = vim.api.nvim_create_namespace("handoff_review_notes")
+local SINGLE_NOTE_PREVIEW_MAX_CHARS = 40
 
 local function assert_stable_file_path(path)
   if path == nil or path == "" then
@@ -15,6 +17,24 @@ local function assert_single_line_review_note(note)
   if note:find("\n") then
     error("Review Note must be single-line text")
   end
+end
+
+local function normalize_line_range(start_line, end_line)
+  local normalized_start = math.min(start_line, end_line)
+  local normalized_end = math.max(start_line, end_line)
+  return normalized_start, normalized_end
+end
+
+local function truncate_with_ellipsis(text, max_chars)
+  if vim.fn.strchars(text) <= max_chars then
+    return text
+  end
+
+  if max_chars <= 3 then
+    return vim.fn.strcharpart(text, 0, max_chars)
+  end
+
+  return vim.fn.strcharpart(text, 0, max_chars - 3) .. "..."
 end
 
 local function path_relative_to(base, path)
@@ -62,9 +82,10 @@ local function create_reference(start_line, end_line)
 
   local effective_start_line = start_line or vim.api.nvim_win_get_cursor(0)[1]
   local effective_end_line = end_line or effective_start_line
+  local normalized_start, normalized_end = normalize_line_range(effective_start_line, effective_end_line)
   local relative_path = resolve_reference_path(path)
 
-  return format_reference(relative_path, effective_start_line, effective_end_line)
+  return format_reference(relative_path, normalized_start, normalized_end)
 end
 
 M.copy_reference = function(start_line, end_line)
@@ -82,6 +103,7 @@ M.add_review_note = function(note, start_line, end_line)
   local entry = { reference = reference, note = note }
 
   table.insert(review_notes, entry)
+  M.refresh_review_note_ghost_text()
   vim.notify(string.format("Review Note added (%d pending)", #review_notes))
 
   return {
@@ -113,6 +135,62 @@ local function parse_reference(reference)
   end
 
   return reference, math.huge, math.huge
+end
+
+local function ghost_text_for_notes(notes_on_line)
+  if #notes_on_line == 1 then
+    local preview = truncate_with_ellipsis(notes_on_line[1], SINGLE_NOTE_PREVIEW_MAX_CHARS)
+    return string.format("%s", preview)
+  end
+
+  return string.format("%d notes", #notes_on_line)
+end
+
+local function render_review_note_ghost_text_for_buffer(bufnr)
+  vim.api.nvim_buf_clear_namespace(bufnr, ghost_text_namespace, 0, -1)
+
+  local absolute_path = vim.api.nvim_buf_get_name(bufnr)
+  if absolute_path == nil or absolute_path == "" then
+    return
+  end
+
+  local buffer_reference_path = resolve_reference_path(absolute_path)
+  local notes_by_start_line = {}
+
+  for _, entry in ipairs(review_notes) do
+    local note_path, start_line, end_line = parse_reference(entry.reference)
+    if note_path == buffer_reference_path then
+      local anchor_line = math.min(start_line, end_line)
+      notes_by_start_line[anchor_line] = notes_by_start_line[anchor_line] or {}
+      table.insert(notes_by_start_line[anchor_line], entry.note)
+    end
+  end
+
+  local sorted_lines = {}
+  for line, _ in pairs(notes_by_start_line) do
+    table.insert(sorted_lines, line)
+  end
+  table.sort(sorted_lines)
+
+  for _, line in ipairs(sorted_lines) do
+    vim.api.nvim_buf_set_extmark(bufnr, ghost_text_namespace, line - 1, 0, {
+      virt_text = { { ghost_text_for_notes(notes_by_start_line[line]), "Comment" } },
+      virt_text_pos = "eol",
+    })
+  end
+end
+
+M.refresh_review_note_ghost_text = function(bufnr)
+  if bufnr ~= nil then
+    render_review_note_ghost_text_for_buffer(bufnr)
+    return
+  end
+
+  for _, listed_bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(listed_bufnr) then
+      render_review_note_ghost_text_for_buffer(listed_bufnr)
+    end
+  end
 end
 
 M.export_review_notes = function()
@@ -159,6 +237,7 @@ end
 
 M.clear_review_notes = function()
   review_notes = {}
+  M.refresh_review_note_ghost_text()
 end
 
 M._clear_review_notes = function()

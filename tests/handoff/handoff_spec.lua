@@ -8,6 +8,30 @@ local function write_temp_file(relative_path, lines)
   return file_path
 end
 
+local function ghost_text_on_line(bufnr, line)
+  local namespace = vim.api.nvim_get_namespaces()["handoff_review_notes"]
+  if not namespace then
+    return nil
+  end
+
+  local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, namespace, { line - 1, 0 }, { line - 1, -1 }, { details = true })
+  if #extmarks == 0 then
+    return nil
+  end
+
+  local details = extmarks[1][4]
+  return details.virt_text[1][1]
+end
+
+local function all_ghost_text_extmarks(bufnr)
+  local namespace = vim.api.nvim_get_namespaces()["handoff_review_notes"]
+  if not namespace then
+    return {}
+  end
+
+  return vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, { details = true })
+end
+
 describe("handoff", function()
   after_each(function()
     vim.cmd.cd(repo_root)
@@ -325,6 +349,86 @@ describe("handoff", function()
       { reference = "tests/tmp/review_command_prompt_empty.lua:1", note = "Existing note" },
     }, plugin._list_review_notes())
     assert.matches("cancel", string.lower(notifications[1]))
+  end)
+
+  it("anchors a Review Note captured with reversed line order at the normalized start line", function()
+    local file_path = write_temp_file("tests/tmp/review_normalized_anchor.lua", { "one", "two", "three", "four", "five" })
+
+    vim.cmd.edit(file_path)
+
+    local result = plugin.add_review_note("Normalize range", 5, 2)
+
+    assert.are.same({
+      reference = "tests/tmp/review_normalized_anchor.lua:2:5",
+      note = "Normalize range",
+      pending_count = 1,
+    }, result)
+    assert.are.equal("Normalize range", ghost_text_on_line(0, 2))
+    assert.is_nil(ghost_text_on_line(0, 5))
+  end)
+
+  it("renders single-note ghost text with 40-character truncation and ellipsis on overflow", function()
+    local file_path = write_temp_file("tests/tmp/review_single_ghost.lua", { "one", "two" })
+    local long_note = "12345678901234567890123456789012345678901"
+
+    vim.cmd.edit(file_path)
+
+    plugin.add_review_note(long_note, 2, 2)
+
+    assert.are.equal("1234567890123456789012345678901234567...", ghost_text_on_line(0, 2))
+  end)
+
+  it("renders a compact note count when multiple Review Notes share a start line", function()
+    local file_path = write_temp_file("tests/tmp/review_multi_ghost.lua", { "one", "two", "three" })
+
+    vim.cmd.edit(file_path)
+
+    plugin.add_review_note("First", 2, 2)
+    plugin.add_review_note("Second", 2, 2)
+
+    assert.are.equal("2 notes", ghost_text_on_line(0, 2))
+  end)
+
+  it("renders ghost text only in buffers whose path matches Review Note references", function()
+    local alpha_path = write_temp_file("tests/tmp/ghost_alpha.lua", { "one", "two" })
+    local beta_path = write_temp_file("tests/tmp/ghost_beta.lua", { "one", "two" })
+
+    vim.cmd.edit(alpha_path)
+    plugin.add_review_note("Alpha note", 1, 1)
+
+    assert.are.equal("Alpha note", ghost_text_on_line(0, 1))
+
+    vim.cmd.edit(beta_path)
+
+    assert.is_nil(ghost_text_on_line(0, 1))
+  end)
+
+  it("refreshes ghost text on clear, BufEnter, and WinEnter without export side effects", function()
+    local file_path = write_temp_file("tests/tmp/review_refresh_ghost.lua", { "one", "two", "three" })
+
+    vim.cmd.edit(file_path)
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+    plugin.add_review_note("Refresh me", 2, 2)
+
+    local before_export = all_ghost_text_extmarks(0)
+
+    plugin.export_review_notes()
+
+    assert.are.same(before_export, all_ghost_text_extmarks(0))
+
+    local namespace = vim.api.nvim_get_namespaces()["handoff_review_notes"]
+    vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
+    assert.is_nil(ghost_text_on_line(0, 2))
+
+    vim.api.nvim_exec_autocmds("BufEnter", { buffer = 0 })
+    assert.are.equal("Refresh me", ghost_text_on_line(0, 2))
+
+    vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
+    vim.api.nvim_exec_autocmds("WinEnter", { buffer = 0 })
+    assert.are.equal("Refresh me", ghost_text_on_line(0, 2))
+
+    plugin.clear_review_notes()
+    assert.is_nil(ghost_text_on_line(0, 2))
   end)
 
   it("exports all pending Review Notes as plain text lines to the + register", function()
