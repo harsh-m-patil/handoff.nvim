@@ -253,6 +253,80 @@ describe("handoff", function()
     assert.matches("1 pending", notifications[1])
   end)
 
+  it("prompts for Review Note text when :HandoffAddReviewNote is called without args", function()
+    local file_path = write_temp_file("tests/tmp/review_command_prompt.lua", { "one", "two", "three" })
+    local original_input = vim.ui.input
+
+    vim.cmd.edit(file_path)
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+    vim.ui.input = function(_, on_confirm)
+      on_confirm("Prompted note")
+    end
+
+    vim.cmd.HandoffAddReviewNote()
+
+    vim.ui.input = original_input
+
+    assert.are.same({
+      { reference = "tests/tmp/review_command_prompt.lua:2", note = "Prompted note" },
+    }, plugin._list_review_notes())
+  end)
+
+  it("treats canceled interactive Review Note entry as a no-op with feedback", function()
+    local file_path = write_temp_file("tests/tmp/review_command_prompt_cancel.lua", { "one", "two", "three" })
+    local original_input = vim.ui.input
+    local original_notify = vim.notify
+    local notifications = {}
+
+    vim.cmd.edit(file_path)
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+    vim.ui.input = function(_, on_confirm)
+      on_confirm(nil)
+    end
+    vim.notify = function(message)
+      table.insert(notifications, message)
+    end
+
+    vim.cmd.HandoffAddReviewNote()
+
+    vim.ui.input = original_input
+    vim.notify = original_notify
+
+    assert.are.same({}, plugin._list_review_notes())
+    assert.matches("cancel", string.lower(notifications[1]))
+  end)
+
+  it("treats empty interactive Review Note submit as a no-op without mutating pending notes", function()
+    local file_path = write_temp_file("tests/tmp/review_command_prompt_empty.lua", { "one", "two", "three" })
+    local original_input = vim.ui.input
+    local original_notify = vim.notify
+    local notifications = {}
+
+    vim.cmd.edit(file_path)
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    plugin.add_review_note("Existing note")
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+    vim.ui.input = function(_, on_confirm)
+      on_confirm("")
+    end
+    vim.notify = function(message)
+      table.insert(notifications, message)
+    end
+
+    vim.cmd.HandoffAddReviewNote()
+
+    vim.ui.input = original_input
+    vim.notify = original_notify
+
+    assert.are.same({
+      { reference = "tests/tmp/review_command_prompt_empty.lua:1", note = "Existing note" },
+    }, plugin._list_review_notes())
+    assert.matches("cancel", string.lower(notifications[1]))
+  end)
+
   it("exports all pending Review Notes as plain text lines to the + register", function()
     local file_path = write_temp_file("tests/tmp/review_export.lua", { "one", "two", "three" })
 
