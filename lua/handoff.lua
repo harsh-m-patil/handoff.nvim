@@ -100,8 +100,69 @@ M._list_review_notes = function()
   return entries
 end
 
-M._clear_review_notes = function()
+local function parse_reference(reference)
+  local path, start_line, end_line = reference:match("^(.-):(%d+):(%d+)$")
+  if path then
+    return path, tonumber(start_line), tonumber(end_line)
+  end
+
+  path, start_line = reference:match("^(.-):(%d+)$")
+  if path then
+    local parsed_start = tonumber(start_line)
+    return path, parsed_start, parsed_start
+  end
+
+  return reference, math.huge, math.huge
+end
+
+M.export_review_notes = function()
+  local sorted_entries = {}
+
+  for i, entry in ipairs(review_notes) do
+    local path, start_line, end_line = parse_reference(entry.reference)
+    sorted_entries[i] = {
+      reference = entry.reference,
+      note = entry.note,
+      path = path,
+      start_line = start_line,
+      end_line = end_line,
+      original_index = i,
+    }
+  end
+
+  table.sort(sorted_entries, function(a, b)
+    if a.path ~= b.path then
+      return a.path < b.path
+    end
+
+    if a.start_line ~= b.start_line then
+      return a.start_line < b.start_line
+    end
+
+    if a.end_line ~= b.end_line then
+      return a.end_line < b.end_line
+    end
+
+    return a.original_index < b.original_index
+  end)
+
+  local lines = {}
+  for i, entry in ipairs(sorted_entries) do
+    lines[i] = string.format("%s %s", entry.reference, entry.note)
+  end
+
+  local output = table.concat(lines, "\n")
+  vim.fn.setreg("+", output)
+
+  return output
+end
+
+M.clear_review_notes = function()
   review_notes = {}
+end
+
+M._clear_review_notes = function()
+  M.clear_review_notes()
 end
 
 return M
