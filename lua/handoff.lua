@@ -1,8 +1,19 @@
 local M = {}
+local review_notes = {}
 
 local function assert_stable_file_path(path)
   if path == nil or path == "" then
     error("Cannot create a Reference without a stable file path")
+  end
+end
+
+local function assert_single_line_review_note(note)
+  if type(note) ~= "string" or note == "" then
+    error("Review Note must be a non-empty single-line string")
+  end
+
+  if note:find("\n") then
+    error("Review Note must be single-line text")
   end
 end
 
@@ -45,18 +56,52 @@ local function format_reference(path, start_line, end_line)
   return string.format("%s:%d:%d", path, start_line, end_line)
 end
 
-M.copy_reference = function(start_line, end_line)
+local function create_reference(start_line, end_line)
   local path = vim.api.nvim_buf_get_name(0)
   assert_stable_file_path(path)
 
   local effective_start_line = start_line or vim.api.nvim_win_get_cursor(0)[1]
   local effective_end_line = end_line or effective_start_line
   local relative_path = resolve_reference_path(path)
-  local reference = format_reference(relative_path, effective_start_line, effective_end_line)
+
+  return format_reference(relative_path, effective_start_line, effective_end_line)
+end
+
+M.copy_reference = function(start_line, end_line)
+  local reference = create_reference(start_line, end_line)
 
   vim.fn.setreg("+", reference)
 
   return reference
+end
+
+M.add_review_note = function(note, start_line, end_line)
+  assert_single_line_review_note(note)
+
+  local reference = create_reference(start_line, end_line)
+  local entry = { reference = reference, note = note }
+
+  table.insert(review_notes, entry)
+  vim.notify(string.format("Review Note added (%d pending)", #review_notes))
+
+  return {
+    reference = entry.reference,
+    note = entry.note,
+    pending_count = #review_notes,
+  }
+end
+
+M._list_review_notes = function()
+  local entries = {}
+  for i, entry in ipairs(review_notes) do
+    entries[i] = { reference = entry.reference, note = entry.note }
+  end
+
+  return entries
+end
+
+M._clear_review_notes = function()
+  review_notes = {}
 end
 
 return M
