@@ -26,6 +26,18 @@ describe("handoff", function()
     assert.are.equal("tests/tmp/current_line.lua:2", vim.fn.getreg("+"))
   end)
 
+  it("copies a multi-line Reference via an explicit Ex range", function()
+    local file_path = write_temp_file("tests/tmp/ex_range.lua", { "first line", "second line", "third line" })
+
+    vim.cmd.edit(file_path)
+    vim.fn.setreg("+", "")
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+
+    vim.cmd("2,3HandoffCopyReference")
+
+    assert.are.equal("tests/tmp/ex_range.lua:2:3", vim.fn.getreg("+"))
+  end)
+
   it("copies current-line Reference to the + register via the public Lua API", function()
     local file_path = write_temp_file("tests/tmp/lua_api.lua", { "alpha", "beta", "gamma" })
 
@@ -36,6 +48,32 @@ describe("handoff", function()
     plugin.copy_reference()
 
     assert.are.equal("tests/tmp/lua_api.lua:3", vim.fn.getreg("+"))
+  end)
+
+  it("collapses a single-line range to the compact Reference form", function()
+    local file_path = write_temp_file("tests/tmp/single_line_range.lua", { "alpha", "beta", "gamma" })
+
+    vim.cmd.edit(file_path)
+    vim.fn.setreg("+", "")
+
+    local reference = plugin.copy_reference(2, 2)
+
+    assert.are.equal("tests/tmp/single_line_range.lua:2", reference)
+    assert.are.equal("tests/tmp/single_line_range.lua:2", vim.fn.getreg("+"))
+  end)
+
+  it("copies a multi-line Reference via a visual selection command range", function()
+    local file_path = write_temp_file("tests/tmp/visual_range.lua", { "alpha", "beta", "gamma" })
+
+    vim.cmd.edit(file_path)
+    vim.fn.setreg("+", "")
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+    vim.fn.setpos("'<", { 0, 1, 1, 0 })
+    vim.fn.setpos("'>", { 0, 3, 1, 0 })
+
+    vim.cmd("'<,'>HandoffCopyReference")
+
+    assert.are.equal("tests/tmp/visual_range.lua:1:3", vim.fn.getreg("+"))
   end)
 
   it("uses a git-root-relative path when the buffer is inside a git repository", function()

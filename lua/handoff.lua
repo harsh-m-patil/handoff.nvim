@@ -37,13 +37,22 @@ end
 M.setup = function(_)
 end
 
-M.copy_reference = function()
+local function format_reference(path, start_line, end_line)
+  if start_line == end_line then
+    return string.format("%s:%d", path, start_line)
+  end
+
+  return string.format("%s:%d:%d", path, start_line, end_line)
+end
+
+M.copy_reference = function(start_line, end_line)
   local path = vim.api.nvim_buf_get_name(0)
   assert_stable_file_path(path)
 
-  local line = vim.api.nvim_win_get_cursor(0)[1]
+  local effective_start_line = start_line or vim.api.nvim_win_get_cursor(0)[1]
+  local effective_end_line = end_line or effective_start_line
   local relative_path = resolve_reference_path(path)
-  local reference = string.format("%s:%d", relative_path, line)
+  local reference = format_reference(relative_path, effective_start_line, effective_end_line)
 
   vim.fn.setreg("+", reference)
 
