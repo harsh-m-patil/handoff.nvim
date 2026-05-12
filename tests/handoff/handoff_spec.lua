@@ -252,4 +252,82 @@ describe("handoff", function()
     }, plugin._list_review_notes())
     assert.matches("1 pending", notifications[1])
   end)
+
+  it("exports all pending Review Notes as plain text lines to the + register", function()
+    local file_path = write_temp_file("tests/tmp/review_export.lua", { "one", "two", "three" })
+
+    vim.cmd.edit(file_path)
+    vim.fn.setreg("+", "")
+    plugin.add_review_note("First note", 1, 1)
+    plugin.add_review_note("Second note", 3, 3)
+
+    local exported = plugin.export_review_notes()
+
+    assert.are.equal("tests/tmp/review_export.lua:1 First note\ntests/tmp/review_export.lua:3 Second note", exported)
+    assert.are.equal(exported, vim.fn.getreg("+"))
+  end)
+
+  it("sorts exported Review Notes by path and then line order", function()
+    local alpha_path = write_temp_file("tests/tmp/alpha.lua", { "a", "b", "c", "d" })
+    local beta_path = write_temp_file("tests/tmp/beta.lua", { "a", "b", "c", "d" })
+
+    vim.cmd.edit(beta_path)
+    plugin.add_review_note("beta line 3", 3, 3)
+
+    vim.cmd.edit(alpha_path)
+    plugin.add_review_note("alpha line 4", 4, 4)
+    plugin.add_review_note("alpha line 2", 2, 2)
+
+    local exported = plugin.export_review_notes()
+
+    assert.are.equal(
+      "tests/tmp/alpha.lua:2 alpha line 2\ntests/tmp/alpha.lua:4 alpha line 4\ntests/tmp/beta.lua:3 beta line 3",
+      exported
+    )
+  end)
+
+  it("keeps pending Review Notes after export", function()
+    local file_path = write_temp_file("tests/tmp/review_export_retained.lua", { "one", "two" })
+
+    vim.cmd.edit(file_path)
+    plugin.add_review_note("Keep me", 2, 2)
+
+    plugin.export_review_notes()
+
+    assert.are.same({
+      { reference = "tests/tmp/review_export_retained.lua:2", note = "Keep me" },
+    }, plugin._list_review_notes())
+  end)
+
+  it("clears pending Review Notes via public Lua API", function()
+    local file_path = write_temp_file("tests/tmp/review_clear.lua", { "one", "two" })
+
+    vim.cmd.edit(file_path)
+    plugin.add_review_note("First", 1, 1)
+    plugin.add_review_note("Second", 2, 2)
+
+    plugin.clear_review_notes()
+
+    assert.are.same({}, plugin._list_review_notes())
+  end)
+
+  it("exports and clears pending Review Notes via user commands", function()
+    local file_path = write_temp_file("tests/tmp/review_export_clear_commands.lua", { "one", "two", "three" })
+
+    vim.cmd.edit(file_path)
+    vim.fn.setreg("+", "")
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+    vim.cmd("1HandoffAddReviewNote First")
+    vim.cmd("3HandoffAddReviewNote Third")
+
+    vim.cmd.HandoffExportReviewNotes()
+
+    assert.are.equal(
+      "tests/tmp/review_export_clear_commands.lua:1 First\ntests/tmp/review_export_clear_commands.lua:3 Third",
+      vim.fn.getreg("+")
+    )
+
+    vim.cmd.HandoffClearReviewNotes()
+    assert.are.same({}, plugin._list_review_notes())
+  end)
 end)
