@@ -53,7 +53,7 @@ _Avoid_: Block, chunk
 - `:HandoffAddReviewNote` input mode was resolved to dual behavior: argument mode for scripted/non-interactive use and prompt mode when called with no args.
 - inline display of **Review Notes** was resolved to ghost text shown at each **Reference** start line, only in buffers matching each note's path.
 - interactive note entry cancel semantics were resolved as no-op on empty submit or `<Esc>`, with a cancellation notification and no error.
-- when multiple **Review Notes** share a start line, ghost text was resolved to a compact count indicator (for example, `💬 3 notes`) instead of rendering all note text inline.
+- when multiple **Review Notes** share a start line, ghost text was resolved to a compact count indicator (for example, `3 notes`) instead of rendering all note text inline.
 - when exactly one **Review Note** exists on a start line, ghost text was resolved to a truncated single-note preview with a length cap rather than full unrestricted text.
 - ghost-text rendering was resolved to refresh after note mutations (add/clear) and on buffer/window re-entry, not on continuous cursor/text-change events.
 - exporting **Review Notes** was resolved to leave ghost-text state unchanged because export does not mutate pending notes.

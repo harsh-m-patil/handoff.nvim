@@ -25,3 +25,11 @@ end, {})
 vim.api.nvim_create_user_command("HandoffClearReviewNotes", function()
   require("handoff").clear_review_notes()
 end, {})
+
+local group = vim.api.nvim_create_augroup("HandoffReviewNoteGhostText", { clear = true })
+vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+  group = group,
+  callback = function(args)
+    require("handoff").refresh_review_note_ghost_text(args.buf)
+  end,
+})
