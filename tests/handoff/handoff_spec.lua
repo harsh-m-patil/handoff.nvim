@@ -12,6 +12,7 @@ describe("handoff", function()
   after_each(function()
     vim.cmd.cd(repo_root)
     vim.fn.delete(vim.fn.fnamemodify("tests/tmp", ":p"), "rf")
+    plugin._clear_review_notes()
   end)
   it("copies current-line Reference to the + register via :HandoffCopyReference", function()
     local file_path = write_temp_file("tests/tmp/current_line.lua", { "first line", "second line", "third line" })
@@ -139,5 +140,116 @@ describe("handoff", function()
     assert.is_false(ok)
     assert.matches("stable file path", err)
     assert.are.equal("keep-me", vim.fn.getreg("+"))
+  end)
+
+  it("adds a current-line Review Note via the public Lua API with pending-count feedback", function()
+    local file_path = write_temp_file("tests/tmp/review_current.lua", { "one", "two", "three" })
+    local original_notify = vim.notify
+    local notifications = {}
+
+    vim.cmd.edit(file_path)
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    vim.notify = function(message)
+      table.insert(notifications, message)
+    end
+
+    local result = plugin.add_review_note("Rename this variable")
+
+    vim.notify = original_notify
+
+    assert.are.same({
+      reference = "tests/tmp/review_current.lua:2",
+      note = "Rename this variable",
+      pending_count = 1,
+    }, result)
+
+    assert.are.same({
+      { reference = "tests/tmp/review_current.lua:2", note = "Rename this variable" },
+    }, plugin._list_review_notes())
+    assert.matches("1 pending", notifications[1])
+  end)
+
+  it("adds a selected-range Review Note via the public Lua API", function()
+    local file_path = write_temp_file("tests/tmp/review_range.lua", { "alpha", "beta", "gamma" })
+
+    vim.cmd.edit(file_path)
+
+    local result = plugin.add_review_note("Extract this block", 1, 3)
+
+    assert.are.same({
+      reference = "tests/tmp/review_range.lua:1:3",
+      note = "Extract this block",
+      pending_count = 1,
+    }, result)
+
+    assert.are.same({
+      { reference = "tests/tmp/review_range.lua:1:3", note = "Extract this block" },
+    }, plugin._list_review_notes())
+  end)
+
+  it("appends duplicate Review Notes on the same Reference", function()
+    local file_path = write_temp_file("tests/tmp/review_duplicates.lua", { "alpha", "beta", "gamma" })
+
+    vim.cmd.edit(file_path)
+
+    plugin.add_review_note("First note", 2, 2)
+    local second = plugin.add_review_note("Second note", 2, 2)
+
+    assert.are.equal(2, second.pending_count)
+    assert.are.same({
+      { reference = "tests/tmp/review_duplicates.lua:2", note = "First note" },
+      { reference = "tests/tmp/review_duplicates.lua:2", note = "Second note" },
+    }, plugin._list_review_notes())
+  end)
+
+  it("freezes each Review Note Reference at creation time", function()
+    local file_path = write_temp_file("tests/tmp/review_frozen.lua", { "one", "two", "three" })
+
+    vim.cmd.edit(file_path)
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    plugin.add_review_note("First capture")
+
+    vim.api.nvim_win_set_cursor(0, { 3, 0 })
+    plugin.add_review_note("Second capture")
+
+    assert.are.same({
+      { reference = "tests/tmp/review_frozen.lua:1", note = "First capture" },
+      { reference = "tests/tmp/review_frozen.lua:3", note = "Second capture" },
+    }, plugin._list_review_notes())
+  end)
+
+  it("adds a current-line Review Note via :HandoffAddReviewNote", function()
+    local file_path = write_temp_file("tests/tmp/review_command_current.lua", { "one", "two", "three" })
+
+    vim.cmd.edit(file_path)
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+
+    vim.cmd("HandoffAddReviewNote Use clearer naming")
+
+    assert.are.same({
+      { reference = "tests/tmp/review_command_current.lua:2", note = "Use clearer naming" },
+    }, plugin._list_review_notes())
+  end)
+
+  it("adds a selected-range Review Note via :HandoffAddReviewNote", function()
+    local file_path = write_temp_file("tests/tmp/review_command.lua", { "one", "two", "three" })
+    local original_notify = vim.notify
+    local notifications = {}
+
+    vim.cmd.edit(file_path)
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+    vim.notify = function(message)
+      table.insert(notifications, message)
+    end
+
+    vim.cmd("2,3HandoffAddReviewNote Tighten loop boundaries")
+
+    vim.notify = original_notify
+
+    assert.are.same({
+      { reference = "tests/tmp/review_command.lua:2:3", note = "Tighten loop boundaries" },
+    }, plugin._list_review_notes())
+    assert.matches("1 pending", notifications[1])
   end)
 end)
