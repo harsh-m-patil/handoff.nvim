@@ -193,7 +193,7 @@ M.refresh_review_note_ghost_text = function(bufnr)
   end
 end
 
-M.export_review_notes = function()
+local function review_notes_output()
   local sorted_entries = {}
 
   for i, entry in ipairs(review_notes) do
@@ -229,9 +229,18 @@ M.export_review_notes = function()
     lines[i] = string.format("%s %s", entry.reference, entry.note)
   end
 
-  local output = table.concat(lines, "\n")
-  vim.fn.setreg("+", output)
+  return table.concat(lines, "\n")
+end
 
+M.inspect_review_notes = function()
+  local output = review_notes_output()
+  vim.notify(output)
+  return output
+end
+
+M.export_review_notes = function()
+  local output = review_notes_output()
+  vim.fn.setreg("+", output)
   return output
 end
 

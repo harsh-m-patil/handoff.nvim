@@ -20,11 +20,13 @@ Current public interface:
   - `:HandoffAddReviewNote [note]`
     - with `{note}`: adds the note directly (non-interactive)
     - without args: prompts via `vim.ui.input()` (interactive)
+  - `:HandoffInspectReviewNotes`
   - `:HandoffExportReviewNotes`
   - `:HandoffClearReviewNotes`
 - Lua API:
   - `require("handoff").copy_reference(start_line?, end_line?)`
   - `require("handoff").add_review_note(note, start_line?, end_line?)`
+  - `require("handoff").inspect_review_notes()`
   - `require("handoff").export_review_notes()`
   - `require("handoff").clear_review_notes()`
 
@@ -47,6 +49,7 @@ Behavior:
   - multiple notes on same start line: shows compact count (e.g. `2 notes`)
   - range notes are anchored to the normalized start line
 - refreshes ghost text on `BufEnter`/`WinEnter`, and clears it when notes are cleared
+- inspects all pending Review Notes inside Neovim via notification output (`<reference> <note>`, one per line) without clearing
 - exports all pending Review Notes to the `+` register as plain text (`<reference> <note>`, one per line)
 - sorts exported Review Notes by path and line order
 - keeps pending Review Notes after export until explicitly cleared
