@@ -18,6 +18,10 @@ vim.api.nvim_create_user_command("HandoffAddReviewNote", function(opts)
   end)
 end, { range = true, nargs = "?" })
 
+vim.api.nvim_create_user_command("HandoffInspectReviewNotes", function()
+  require("handoff").inspect_review_notes()
+end, {})
+
 vim.api.nvim_create_user_command("HandoffExportReviewNotes", function()
   require("handoff").export_review_notes()
 end, {})

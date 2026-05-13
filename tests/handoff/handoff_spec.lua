@@ -431,6 +431,57 @@ describe("handoff", function()
     assert.is_nil(ghost_text_on_line(0, 2))
   end)
 
+  it("inspects pending Review Notes via public Lua API without clearing them", function()
+    local file_path = write_temp_file("tests/tmp/review_inspect.lua", { "one", "two", "three" })
+    local original_notify = vim.notify
+    local notifications = {}
+
+    vim.cmd.edit(file_path)
+    plugin.add_review_note("First note", 1, 1)
+    plugin.add_review_note("Third note", 3, 3)
+    vim.notify = function(message)
+      table.insert(notifications, message)
+    end
+
+    local inspected = plugin.inspect_review_notes()
+
+    vim.notify = original_notify
+
+    assert.are.equal("tests/tmp/review_inspect.lua:1 First note\ntests/tmp/review_inspect.lua:3 Third note", inspected)
+    assert.are.equal(inspected, notifications[1])
+    assert.are.same({
+      { reference = "tests/tmp/review_inspect.lua:1", note = "First note" },
+      { reference = "tests/tmp/review_inspect.lua:3", note = "Third note" },
+    }, plugin._list_review_notes())
+  end)
+
+  it("inspects pending Review Notes via :HandoffInspectReviewNotes without clearing them", function()
+    local file_path = write_temp_file("tests/tmp/review_inspect_command.lua", { "one", "two", "three" })
+    local original_notify = vim.notify
+    local notifications = {}
+
+    vim.cmd.edit(file_path)
+    plugin.add_review_note("First note", 1, 1)
+    plugin.add_review_note("Third note", 3, 3)
+    vim.cmd.runtime({ "plugin/handoff.lua", bang = true })
+    vim.notify = function(message)
+      table.insert(notifications, message)
+    end
+
+    vim.cmd.HandoffInspectReviewNotes()
+
+    vim.notify = original_notify
+
+    assert.are.equal(
+      "tests/tmp/review_inspect_command.lua:1 First note\ntests/tmp/review_inspect_command.lua:3 Third note",
+      notifications[1]
+    )
+    assert.are.same({
+      { reference = "tests/tmp/review_inspect_command.lua:1", note = "First note" },
+      { reference = "tests/tmp/review_inspect_command.lua:3", note = "Third note" },
+    }, plugin._list_review_notes())
+  end)
+
   it("exports all pending Review Notes as plain text lines to the + register", function()
     local file_path = write_temp_file("tests/tmp/review_export.lua", { "one", "two", "three" })
 
